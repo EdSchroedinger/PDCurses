@@ -84,9 +84,6 @@ delch.obj: $(srcdir)\delch.c $(PDCURSES_HEADERS)
 deleteln.obj: $(srcdir)\deleteln.c $(PDCURSES_HEADERS)
 	$(BUILD) $(srcdir)\deleteln.c
 
-deprec.obj: $(srcdir)\deprec.c $(PDCURSES_HEADERS)
-	$(BUILD) $(srcdir)\deprec.c
-
 getch.obj: $(srcdir)\getch.c $(PDCURSES_HEADERS)
 	$(BUILD) $(srcdir)\getch.c
 
@@ -162,9 +159,6 @@ slk.obj: $(srcdir)\slk.c $(PDCURSES_HEADERS)
 termattr.obj: $(srcdir)\termattr.c $(PDCURSES_HEADERS)
 	$(BUILD) $(srcdir)\termattr.c
 
-terminfo.obj: $(srcdir)\terminfo.c $(PDCURSES_HEADERS) $(TERM_HEADER)
-	$(BUILD) $(srcdir)\terminfo.c
-
 touch.obj: $(srcdir)\touch.c $(PDCURSES_HEADERS)
 	$(BUILD) $(srcdir)\touch.c
 
@@ -201,7 +195,7 @@ pdcutil.obj: $(osdir)\pdcutil.c $(PDCURSES_HEADERS) $(PDCURSES_OS2_H)
 firework.exe: firework.obj $(LIBCURSES)
 	$(LINK) $(LDFLAGS) $*.obj,$*,,$(LIBCURSES);
 
-newdemo.exe: newdemo.obj $(LIBCURSES)
+ozdemo.exe: ozdemo.obj $(LIBCURSES)
 	$(LINK) $(LDFLAGS) $*.obj,$*,,$(LIBCURSES);
 
 ptest.exe: ptest.obj $(LIBCURSES)
@@ -225,8 +219,8 @@ xmas.exe: xmas.obj $(LIBCURSES)
 firework.obj: $(demodir)\firework.c $(PDCURSES_CURSES_H)
 	$(BUILD) $(demodir)\firework.c
 
-newdemo.obj: $(demodir)\newdemo.c $(PDCURSES_CURSES_H)
-	$(BUILD) $(demodir)\newdemo.c
+ozdemo.obj: $(demodir)\ozdemo.c $(PDCURSES_CURSES_H)
+	$(BUILD) $(demodir)\ozdemo.c
 
 ptest.obj: $(demodir)\ptest.c $(PANEL_HEADER) $(PDCURSES_CURSES_H)
 	$(BUILD) $(demodir)\ptest.c

@@ -2,11 +2,7 @@
 
 #include "pdcos2.h"
 
-#ifdef CHTYPE_LONG
 # define PDC_OFFSET 32
-#else
-# define PDC_OFFSET  8
-#endif
 
 /* COLOR_PAIR to attribute encoding table. */
 
@@ -136,8 +132,7 @@ int PDC_scr_open(int argc, char **argv)
 #else
     USHORT totchars;
 #endif
-    int i;
-    short r, g, b;
+    int i, r, g, b;
 
     PDC_LOG(("PDC_scr_open() - called\n"));
 
@@ -171,6 +166,8 @@ int PDC_scr_open(int argc, char **argv)
 
     SP->mouse_wait = PDC_CLICK_PERIOD;
     SP->audible = TRUE;
+
+    SP->termattrs = (SP->mono ? 0 : A_COLOR) | A_REVERSE | A_BLINK;
 
     /* This code for preserving the current screen */
 
@@ -348,7 +345,7 @@ bool PDC_can_change_color(void)
     return can_change;
 }
 
-int PDC_color_content(short color, short *red, short *green, short *blue)
+int PDC_color_content(int color, int *red, int *green, int *blue)
 {
 #ifdef PDCTHUNK
     THUNKEDVIO vcr;
@@ -388,7 +385,7 @@ int PDC_color_content(short color, short *red, short *green, short *blue)
 #endif
 }
 
-int PDC_init_color(short color, short red, short green, short blue)
+int PDC_init_color(int color, int red, int green, int blue)
 {
 #ifdef PDCTHUNK
     THUNKEDVIO vcr;
@@ -426,12 +423,21 @@ int PDC_init_color(short color, short red, short green, short blue)
 #endif
 }
 
+ /* Does nothing in the DOS (or OS/2 or Win32 console) flavors of PDCurses,
+which lack user resizing.  See X11 or Win32a versions of this function for
+details of what it does on platforms that do support user resizing. */
+
+void PDC_set_resize_limits( const int new_min_lines, const int new_max_lines,
+                  const int new_min_cols, const int new_max_cols)
+{
+}
+
 /* PDC_set_function_key() does nothing on this platform */
 int PDC_set_function_key( const unsigned function, const int new_key)
 {
     int old_key = -1;
 
-    if( function < MAX_FUNCTION_KEYS)
+    if( function < PDC_MAX_FUNCTION_KEYS)
     {
          old_key = PDC_shutdown_key[function];
          PDC_shutdown_key[function] = new_key;

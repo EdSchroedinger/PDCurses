@@ -7,37 +7,58 @@
  *    displayed properly.  Also tests "extended" SLK functions.
  *
  */
+#ifndef _XOPEN_SOURCE_EXTENDED
+# define _XOPEN_SOURCE_EXTENDED 1
+#endif
 
-#include <curses.h>
+#ifdef PDC_WIDE
+   #define HAVE_WIDE
+   #include <wchar.h>
+   #include <curses.h>
+#endif
+#ifdef HAVE_NCURSESW
+   #define HAVE_WIDE
+   #include <wchar.h>
+   #include <ncursesw/curses.h>
+#endif
+
+#ifndef HAVE_WIDE
+   #include <curses.h>
+#endif
+
 #include <string.h>
 #include <stdio.h>
 #include <locale.h>
 
 int PDC_write_screen_to_file( const char *filename, WINDOW *win);
 
-static const char *labels[] = {
-               "Quit", "Blink", "No labels", "431", "2134", "55",
-               "62-really-longer-than-it-should-be-just-for-testing",
-               "83", "7", "b", "25",
-               "Able", "Baker", "Charlie", "Dog",
-               "Easy", "Fox", "Golf", "How", "Item",
-               "Jig", "King", "Love", "Mike", "Nan",
-               "Oboe", "Peter", "Queen", "Roger", "Sugar",
-               "Tear", "Uncle", "Victor", "Whiskey",
-               "X-Ray", "Yoke", "Zebra", NULL };
+#ifndef A_OVERLINE
+   #define A_OVERLINE   0
+#endif
 
+static const char *labels[] = {
+               "Quit", "No labels", "431", "2134", "55",
+               "62-really-longer-than-it-should-be-just-for-testing",
+               "83", "7", "b", "25 (seven total)", "32", NULL };
 
 static void slk_setup( const int slk_format)
 {
     int i;
+#ifdef PDCURSES
     static int old_format = 0xa;
 
     if( slk_format != old_format)
        slk_init( slk_format);
     old_format = slk_format;
+#endif
     for( i = 0; labels[i]; i++)
        slk_set( i + 1, labels[i], 1);
     slk_refresh( );
+}
+
+static const char *on_off_text( const chtype attrib)
+{
+   return( attrib ? "On " : "Off");
 }
 
    /* Uses the left/right/under/overline capabilities of Win32a */
@@ -47,7 +68,7 @@ void text_in_a_box( const char *istr)
 {
    const int len = (int)strlen( istr);
 
-#ifdef CHTYPE_LONG
+#if defined( A_OVERLINE) && defined( A_UNDERLINE) && defined( A_LEFTLINE) && defined( A_RIGHTLINE)
    attron( A_OVERLINE | A_UNDERLINE | A_LEFTLINE);
    if( len == 1)
       attron( A_RIGHTLINE);
@@ -55,17 +76,17 @@ void text_in_a_box( const char *istr)
    addnstr( istr, 1);
    if( len > 1)
       {
-#ifdef CHTYPE_LONG
+#ifdef A_LEFTLINE
       attroff( A_LEFTLINE);
 #endif
       if( len > 2)
          addnstr( istr + 1, len - 2);
-#ifdef CHTYPE_LONG
+#ifdef A_RIGHTLINE
       attron( A_RIGHTLINE);
 #endif
       addnstr( istr + len - 1, 1);
       }
-#ifdef CHTYPE_LONG
+#if defined( A_OVERLINE) && defined( A_UNDERLINE) && defined( A_LEFTLINE) && defined( A_RIGHTLINE)
    attroff( A_OVERLINE | A_UNDERLINE | A_LEFTLINE | A_RIGHTLINE);
 #endif
 }
@@ -80,7 +101,7 @@ void text_in_a_box( const char *istr)
       /* Default is between "underline" and "invisible".  Set both states */
       /* to the same value to get an unblinking cursor.                   */
 
-#ifdef _WIN32
+#if defined( _WIN32) && !defined( __BORLANDC__)
 #define PURE_WINDOWS_VERSION  1
 #endif
 
@@ -135,17 +156,23 @@ int main( int argc, char **argv)
 #endif
 {
     int quit = 0, i,  use_slk = 1;
+    bool show_mouse_moves = FALSE;
+#ifdef PDCURSES
     int fmt = 0xa;
-    bool blink_state = FALSE;
-    int cursor_state_1 = 2, cursor_state_2 = 3;
+    const char *title_text = "NewTest: tests various PDCurses features";
+#else
+    int fmt = 3;   /* for ncurses,  this is the 4-4-4 SLK format */
+#endif
+    int cursor_state_1 = 0, cursor_state_2 = 1;
+    int cursor_y = 19, cursor_x = 51;
     int show_slk_index_line = 0;
     int redraw = 1;
-    unsigned extra_character_to_show = 0;
-#ifdef PDC_WIDE
+    const char *extra_characters_to_show = "";
+#ifdef HAVE_WIDE
     unsigned unicode_offset = 0x80;
 #endif
 
-/*  setlocale(LC_ALL, ".utf8");     */
+    setlocale(LC_ALL, "");
     ttytype[0] = 25;   ttytype[1] = 90;         /* Allow 25 to 90 lines... */
     ttytype[2] = 80;   ttytype[3] = (char)200;  /* ...and 80 to 200 columns */
          /* (This program gets weird artifacts when smaller than 25x80.) */
@@ -160,7 +187,7 @@ int main( int argc, char **argv)
                     setlocale( LC_ALL, argv[i] + 2);
                     break;
                 case 'e':
-                    sscanf( argv[i] + 2, "%x", &extra_character_to_show);
+                    extra_characters_to_show = argv[i] + 2;
                     break;
                 case 'f':
                     sscanf( argv[i] + 2, "%x", (unsigned *)&fmt);
@@ -192,18 +219,34 @@ int main( int argc, char **argv)
                             resize_term( n_lines, n_cols);
                     }
                     break;
-#ifdef PDC_WIDE
+#ifdef PDCURSES
+                case 'z':
+                    traceon( );
+                    PDC_debug( "Debugging is on\n");
+                    break;
+                case 't':
+                    title_text = argv[i] + 2;
+                    break;
+#endif
+#ifdef HAVE_WIDE
                 case 'u':
                     sscanf( argv[i] + 2, "%x", &unicode_offset);
                     break;
 #endif
+                case 'm':
+                    show_mouse_moves = TRUE;
+                    break;
                 default:
                     printf( "Option '%s' unrecognized\n", argv[i]);
                     break;
             }
     if( use_slk)
-       slk_init( show_slk_index_line ? 3 : 0);
+       slk_init( show_slk_index_line ? -fmt : fmt);
+#ifdef XCURSES
     Xinitscr(argc, argv);
+#else
+    initscr();
+#endif
     if( use_slk)
        slk_setup( show_slk_index_line ? -fmt : fmt);
 
@@ -217,21 +260,21 @@ int main( int argc, char **argv)
     clear();
     refresh();
 #ifdef __PDCURSES__
-    PDC_set_title( "NewTest: tests various PDCurses features");
+    PDC_set_title( title_text);
 #endif
     keypad( stdscr, TRUE);
-    init_pair( 1, 15, COLOR_BLACK);
+    init_pair( 1, COLOR_WHITE, COLOR_BLACK);
     init_pair( 2, COLOR_BLACK, COLOR_YELLOW);
 
-    mousemask( ALL_MOUSE_EVENTS, NULL);
+    mousemask( ALL_MOUSE_EVENTS | (show_mouse_moves ? REPORT_MOUSE_POSITION : 0), NULL);
     attrset( COLOR_PAIR( 1));
     while( !quit)
     {
         char buff[80];
         const int xmax = getmaxx( stdscr);
         const int ymax = getmaxy( stdscr);
-        int color_block_start = 54, c;
-        int color_block_cols = (xmax - color_block_start) / 2;
+        const int color_block_start = 54;
+        int c, color_block_cols = (xmax - color_block_start) / 2;
         const int color_block_lines = 19;
         const char *cursor_state_text[N_CURSORS] = {
                   "Invisible (click to change) ",
@@ -250,29 +293,44 @@ int main( int argc, char **argv)
         {
             mvaddstr( 1, COL1, "'Normal' white-on-black");
             mvaddstr( 2, COL1, longname( ));
-#if(CHTYPE_LONG >= 2)       /* "non-standard" 64-bit chtypes     */
+#ifdef A_DIM
             attron( A_DIM);
             mvaddstr( 15, 41, "Dimmed text");
             attroff( A_DIM);
 #endif
-#ifdef PDC_WIDE
-            mvaddwstr( 3, COL1, L"'Normal' text,  but wide");
+#ifdef A_STANDOUT
+            attron( A_STANDOUT);
+            mvaddstr( 16, 41, "Standout text");
+            attroff( A_STANDOUT);
+#endif
+#ifdef HAVE_WIDE
+            mvaddwstr( 3, COL1, L"'N\xf3rm\xe4\x142' text,  bu\x163 w\xee\x1e0b\xea");
 #endif
             attron( A_BLINK);
-            mvaddstr( 6, 40, "Blinking");
+            sprintf( buff, "Blink %s", on_off_text( termattrs( ) & A_BLINK));
+
+            mvaddstr( 6, 40, buff);
             attron( A_BOLD);
             mvaddstr( 8, 40, "BlinkBold");
+            attrset( A_BOLD);
+            sprintf( buff, "Bold %s", on_off_text( termattrs( ) & A_BOLD));
+            mvaddstr( 7, 40, buff);
+            attron( A_BLINK);
+#ifdef A_ITALIC
             attron( A_ITALIC);
             mvaddstr( 0, COL2, "BlinkBoldItalic");
+#endif
             attrset( COLOR_PAIR( 3));
             attron( A_UNDERLINE);
-#ifdef PDC_WIDE
+#ifdef HAVE_WIDE
             mvaddstr( 1, COL2, "Underlined");
             addwstr( L"WideUnder");
 #endif
             attrset( COLOR_PAIR( 1));
+#ifdef A_ITALIC
             attron( A_UNDERLINE | A_ITALIC);
             mvaddstr( 2, COL2, "UnderlinedItalic");
+#endif
             attrset( COLOR_PAIR( 2));
             attron( A_BLINK);
             mvaddstr( 4, COL1, "Black-on-yellow blinking");
@@ -281,14 +339,14 @@ int main( int argc, char **argv)
             move( 4, COL2);
             text_in_a_box( "Text in a box");
 
-#ifdef CHTYPE_LONG
+#if defined( CHTYPE_64) && defined( A_STRIKEOUT)
             attrset( COLOR_PAIR( 6));
             attron( A_STRIKEOUT);
             mvaddstr( 10, 40, "Strikeout");
             attrset( COLOR_PAIR( 1));
 #endif
 
-#ifdef PDC_WIDE
+#ifdef HAVE_WIDE
             move( 11, 40);
             text_in_a_box( "Next Ucode pg");
             if( unicode_offset)
@@ -300,70 +358,62 @@ int main( int argc, char **argv)
 
 #endif
 
+            mvaddstr( 5, 1, "   0 1 2 3 4 5 6 7 8 9 a b c d e f");
+            for( i = 0; i < 8; i++)
+                {
+                char buff[4];
+
+                sprintf( buff, "%02x",
+#ifdef HAVE_WIDE
+                                (unsigned)( i * 16 + unicode_offset) & 0xff);
+#else
+                                (unsigned)( i * 16 + 128) & 0xff);
+#endif
+                mvaddstr( 6 + i, 1, buff);
+                mvaddstr( 6 + i, 36, buff);
+                }
             for( i = 0; i < 128; i++)
             {                 /* Show extended characters: */
-#ifdef PDC_WIDE
-                wchar_t buff[20];
+#ifdef HAVE_WIDE
+                wchar_t buff[2];
 
-                swprintf( buff, 20, L"%02x ",
-                           (unsigned)( i + unicode_offset) & 0xff);
-                mvaddwstr( 5 + i % 16, (i / 16) * 5, buff);
-                if( i + unicode_offset > ' ')
-                   addch( (chtype)( i + unicode_offset));
-                else
-                   addch( ' ');
-                addch( ' ');
+                buff[0] = (wchar_t)( i + unicode_offset);
+                buff[1] = '\0';
+                mvaddwstr( 6 + i / 16, 4 + 2 * (i % 16), buff);
 #else
-                char buff[6];
-
-                sprintf( buff, "%02x %c", i + 128, (char)(i + 128));
-                mvaddstr( 5 + i % 16, (i / 16) * 5, buff);
+                move( 6 + i / 16, 4 + 2 * (i % 16));
+                addch( i + 128);
 #endif
+                addch( ' ');
             }
-
-#if(CHTYPE_LONG >= 2)       /* "non-standard" 64-bit chtypes     */
-            for( i = 0; i < 3 && i + 21 < ymax; i++)
-            {                 /* Demonstrate full RGB color control: */
-                int j;
-                const char *output_text[3] = {
-                    "Red on green to white on black   | (you can get full RGB colors when desired,",
-                    "Blue on yellow to black on red | with palette coloring still being available)",
-                    "White on red to green on blue,  underlined and italic" };
-                const int len = (int)strlen( output_text[i]);
-
-                move( 21 + i, 1);
-                for( j = 0; j < len && j + 1 < xmax; j++)
-                {
-                    attr_t output_color;
-                    const int oval = j * 31 / len;
-                    const int reverse = 31 - oval;
-
-                    if( !i)
-                        output_color = A_RGB( 31, oval, oval, 0, reverse, 0);
-                    else if( i == 1)
-                        output_color = A_RGB( 0, 0, reverse, 31, reverse, 0);
-                    else
-                    {
-                        output_color = A_RGB( reverse, 31, reverse,
-                               reverse, 0, oval);
-                        output_color |= A_UNDERLINE | A_ITALIC;
-                    }
-                    attrset( output_color);
-                    addch( output_text[i][j]);
-                }
+#ifdef HAVE_WIDE
+            if( unicode_offset == 0x80)
+            {
+                mvaddstr( 6, 1, "   Click on 'bold on/off or 'blink ->");
+                mvaddstr( 7, 1, "   on/off' to toggle those attribs   ");
             }
-#endif         /* #if(CHTYPE_LONG >= 2) */
+#endif
             redraw = 0;
             attrset( COLOR_PAIR( 1));
-            if( extra_character_to_show && ymax > 23)
-                mvaddch( 23, 63, (chtype)extra_character_to_show);
+            if( *extra_characters_to_show && ymax > 23)
+            {
+                unsigned long ival;
+                int bytes_read;
+                const char *tptr = extra_characters_to_show;
 
-#ifdef PDC_WIDE
+                move( 23, 63);
+                while( sscanf( tptr, "%lx%n", &ival, &bytes_read) > 0)
+                {
+                    addch( (chtype)ival);
+                    tptr += bytes_read;
+                    if( *tptr)
+                        tptr++;
+                }
+            }
+#ifdef HAVE_WIDE
             for( i = 0; i < 6; i++)
             {
                 static const wchar_t spanish[] = L"Espa\xf1ol";
-                const int line = 24 + i / 3;
-                const int col = 5 + 25 * (i % 3);
 
                 static const wchar_t russian[] = {0x0420, 0x0443, 0x0441, 0x0441,
                    0x043a, 0x0438, 0x0439, L' ', 0x044f, 0x0437, 0x044b, 0x043a, 0};
@@ -386,10 +436,13 @@ int main( int argc, char **argv)
                 static const wchar_t *texts[6] = { spanish, russian, greek,
                                 georgian, fullwidth, combining_marks};
 
-                if( line < ymax && col < xmax)
-                   mvaddnwstr( line, 5 + 25 * (i % 3), texts[i], xmax - col);
+                mvaddwstr( 15 + i / 2, 2 + 20 * (i % 2), texts[i]);
             }
+#ifdef CHTYPE_64
+             mvaddch( 17, 41, (chtype)0x1d11e);
+#endif            /* U+1D11E = musical symbol G clef */
 #endif
+        mvaddstr( 19, 1, curses_version( ));
 
 #ifdef MAYBE_TRY_THIS_SOMEWHERE_ELSE
         mvaddstr(  1, COL3, "Click on cursor descriptions to");
@@ -418,7 +471,7 @@ int main( int argc, char **argv)
             attron( A_REVERSE);
             addstr( "  ");
         }
-        move( 19, color_block_start - 3);
+        move( cursor_y, cursor_x);
         refresh();
         c = getch( );
         attrset( COLOR_PAIR( 1));
@@ -429,12 +482,7 @@ int main( int argc, char **argv)
         }
         else if( c == KEY_F(1) || c == 27)
             quit = 1;
-        else if( c == KEY_F(2))
-        {
-            blink_state ^= 1;
-            PDC_set_blink( blink_state);
-        }
-        else if( c == KEY_F(3))   /* toggle SLKs */
+        else if( c == KEY_F(2))   /* toggle SLKs */
         {
             use_slk ^= 1;
             if( use_slk)
@@ -442,7 +490,7 @@ int main( int argc, char **argv)
             else
                 slk_clear( );
         }
-        else if( c >= KEY_F(4) && c < KEY_F(12))
+        else if( c >= KEY_F(3) && c < KEY_F(12))
         {
             sscanf( labels[c - KEY_F(1)], "%x", (unsigned *)&fmt);
             if( use_slk)
@@ -465,8 +513,10 @@ int main( int argc, char **argv)
 #else
             getmouse( &mouse_event);
 #endif
-            sprintf( buff, "Mouse at %d x %d: %x  ", mouse_event.x,
+            sprintf( buff, "Mouse at %d x %d: %x     ", mouse_event.x,
                               mouse_event.y, (unsigned)mouse_event.bstate);
+            cursor_x = mouse_event.x;
+            cursor_y = mouse_event.y;
             mvaddstr( 0, COL1, buff);
             if( mouse_event.x >= color_block_start
                             && mouse_event.y < color_block_lines)
@@ -476,8 +526,11 @@ int main( int argc, char **argv)
 
                 if( new_color >= 256)
                     new_color = -1;
+#ifdef PDCURSES
                 PDC_set_line_color( (short)new_color);
+#endif
             }
+#ifdef PDCURSES
             else if( mouse_event.x >= color_block_start)
             {
                 int shift = ((mouse_event.bstate & BUTTON_MODIFIER_SHIFT) ?
@@ -488,21 +541,36 @@ int main( int argc, char **argv)
                 else if( mouse_event.y == 20)  /* cycle cursor state */
                     cursor_state_2 = (cursor_state_2 + shift) % N_CURSORS;
             }
-#ifdef PDC_WIDE
-            else if( mouse_event.x >= 40 && mouse_event.x < 40 + 10)
-               {
-               if( mouse_event.y == 11)
-                  {
-                  redraw = 1;
-                  unicode_offset += 0x80;
-                  }
-               else if( mouse_event.y == 12 && unicode_offset)
-                  {
-                  redraw = 1;
-                  unicode_offset -= 0x80;
-                  }
-               }
 #endif
+            else if( mouse_event.x >= 40 && mouse_event.x <= 52)
+               switch( mouse_event.y)
+               {
+#ifdef HAVE_WIDE
+                  case 11:
+                     redraw = 1;
+                     unicode_offset += 0x80;
+                     break;
+                  case 12:
+                     if( unicode_offset)
+                     {
+                        redraw = 1;
+                        unicode_offset -= 0x80;
+                     }
+                     break;
+#endif
+#ifdef PDCURSES
+                  case 6:
+                     PDC_set_blink( termattrs( ) & A_BLINK ? FALSE : TRUE);
+                     redraw = 1;
+                     break;
+                  case 7:
+                     PDC_set_bold( termattrs( ) & A_BOLD ? FALSE : TRUE);
+                     redraw = 1;
+                     break;
+#endif
+                  default:
+                     break;
+               }
         }
     }
 

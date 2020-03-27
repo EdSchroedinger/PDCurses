@@ -1,20 +1,28 @@
 # Common elements for the Watcom makefiles
 
-srcdir = $(PDCURSES_SRCDIR)\pdcurses
-demodir = $(PDCURSES_SRCDIR)\demos
+!ifeq CROSS Y
+DEL		= rm -f
+COPY		= cp
+!else
+DEL		= del
+COPY		= copy
+!endif
+
+srcdir = $(PDCURSES_SRCDIR)/pdcurses
+demodir = $(PDCURSES_SRCDIR)/demos
 
 LIBOBJS = addch.obj addchstr.obj addstr.obj attr.obj beep.obj bkgd.obj &
-border.obj clear.obj color.obj delch.obj deleteln.obj deprec.obj &
+border.obj clear.obj color.obj delch.obj deleteln.obj &
 getch.obj getstr.obj getyx.obj inch.obj inchstr.obj initscr.obj inopts.obj &
 insch.obj insstr.obj instr.obj kernel.obj keyname.obj mouse.obj move.obj &
 outopts.obj overlay.obj pad.obj panel.obj printw.obj refresh.obj &
-scanw.obj scr_dump.obj scroll.obj slk.obj termattr.obj terminfo.obj &
+scanw.obj scr_dump.obj scroll.obj slk.obj termattr.obj &
 touch.obj util.obj window.obj debug.obj
 
 PDCOBJS = pdcclip.obj pdcdisp.obj pdcgetsc.obj pdckbd.obj pdcscrn.obj &
 pdcsetsc.obj pdcutil.obj
 
-DEMOS = testcurs.exe newdemo.exe xmas.exe tuidemo.exe firework.exe &
+DEMOS = testcurs.exe ozdemo.exe xmas.exe tuidemo.exe firework.exe &
 newtest.exe ptest.exe rain.exe worm.exe
 
 LIBCURSES = pdcurses.lib
@@ -31,22 +39,22 @@ LINK = wlink
 all:	$(LIBCURSES) $(DEMOS)
 
 clean
-	-del *.obj
-	-del *.lib
-	-del *.exe
-	-del *.err
+	-$(DEL) *.obj
+	-$(DEL) *.lib
+	-$(DEL) *.exe
+	-$(DEL) *.err
 
 demos:	$(DEMOS)
 
 .c: $(srcdir);$(osdir);$(demodir)
 .c.obj: .autodepend
-	$(CC) $(CFLAGS) $<
+	$(CC) $(CFLAGS) -fo=$@ $<
 
 .obj.exe:
 	$(LINK) $(LDFLAGS) n $@ f $*.obj l $(LIBCURSES)
 
 testcurs.exe:	testcurs.obj $(LIBCURSES)
-newdemo.exe:	newdemo.obj $(LIBCURSES)
+ozdemo.exe:	ozdemo.obj $(LIBCURSES)
 newtest.exe:	newtest.obj $(LIBCURSES)
 xmas.exe:	xmas.obj $(LIBCURSES)
 firework.exe:	firework.obj $(LIBCURSES)

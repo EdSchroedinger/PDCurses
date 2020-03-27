@@ -2,8 +2,8 @@
  * This is a test program for PDCurses. Originally by
  * John Burnell <johnb@kea.am.dsir.govt.nz>
  *
- *  wrs(5/28/93) -- modified to be consistent (perform identically)
- *                  with either PDCurses or under Unix System V, R4
+ *  wrs (1993-05-28) -- modified to be consistent (perform identically)
+ *                      with either PDCurses or under Unix System V, R4
  */
 
 #ifndef _XOPEN_SOURCE_EXTENDED
@@ -40,9 +40,11 @@
 # define HAVE_COLOR 0
 #endif
 
-/* Set to non-zero if you want to test the PDCurses clipboard */
-
-#define HAVE_CLIPBOARD 0
+#ifdef PDCURSES
+# define HAVE_CLIPBOARD 1
+#else
+# define HAVE_CLIPBOARD 0
+#endif
 
 void inputTest(WINDOW *);
 void scrollTest(WINDOW *);
@@ -51,6 +53,7 @@ int initTest(WINDOW **, int, char **);
 void outputTest(WINDOW *);
 void padTest(WINDOW *);
 void acsTest(WINDOW *);
+void attrTest(WINDOW *);
 
 #if HAVE_COLOR
 void colorTest(WINDOW *);
@@ -78,7 +81,7 @@ struct commands
 
 typedef struct commands COMMAND;
 
-#define MAX_OPTIONS (6 + HAVE_COLOR + HAVE_RESIZE + HAVE_CLIPBOARD + HAVE_WIDE)
+#define MAX_OPTIONS (7 + HAVE_COLOR + HAVE_RESIZE + HAVE_CLIPBOARD + HAVE_WIDE)
 
 COMMAND command[MAX_OPTIONS] =
 {
@@ -91,6 +94,7 @@ COMMAND command[MAX_OPTIONS] =
     {"Input Test", inputTest},
     {"Output Test", outputTest},
     {"ACS Test", acsTest},
+    {"Attrib Test", attrTest},
 #if HAVE_COLOR
     {"Color Test", colorTest},
 #endif
@@ -103,53 +107,17 @@ COMMAND command[MAX_OPTIONS] =
 };
 
 int width, height;
-static short background_index = COLOR_BLACK;
 
 int main(int argc, char *argv[])
 {
     WINDOW *win;
-    int key, old_option = -1, new_option = 0, i;
+    int key, old_option = -1, new_option = 0;
     bool quit = FALSE;
 
     setlocale(LC_ALL, "");
 
     if (initTest(&win, argc, argv))
         return 1;
-
-    for( i = 1; i < argc; i++)
-        if( argv[i][0] == '-')
-            switch( argv[i][1])
-            {
-                case 'b': case 'B':
-                    PDC_set_blink( TRUE);
-                    break;
-                case 'l': case 'L':
-                    setlocale( LC_ALL, argv[i] + 2);
-                    break;
-                case 'i': case 'I':
-                    background_index = (short)atoi( argv[i] + 2);
-                    break;
-                case 'm': case 'M':
-                    PDC_return_key_modifiers( TRUE);
-                    break;
-                case 'r':     /* allow user-resizable windows */
-                    {
-                        int min_lines, max_lines, min_cols, max_cols;
-
-                        if( sscanf( argv[i] + 2, "%d,%d,%d,%d",
-                                       &min_lines, &max_lines,
-                                       &min_cols, &max_cols) == 4)
-                        {
-                            ttytype[0] = min_lines;
-                            ttytype[1] = max_lines;
-                            ttytype[2] = min_cols;
-                            ttytype[3] = max_cols;
-                        }
-                    }
-                    break;
-                default:
-                    break;
-            }
 
 #ifdef A_COLOR
     if (has_colors())
@@ -160,9 +128,6 @@ int main(int argc, char *argv[])
     else
 #endif
         wbkgd(win, A_REVERSE);
-
-    /* for x11, sdl1, and win32a, treat the close of the windows as KEY_EXIT */
-    PDC_set_function_key( FUNCTION_KEY_SHUT_DOWN,        KEY_EXIT );
 
     erase();
     display_menu(old_option, new_option);
@@ -215,6 +180,7 @@ int main(int argc, char *argv[])
                 new_option : new_option + 1;
             display_menu(old_option, new_option);
             break;
+#ifdef KEY_RESIZE
         case KEY_RESIZE:
 # ifdef PDCURSES
             resize_term(0, 0);
@@ -223,6 +189,7 @@ int main(int argc, char *argv[])
             erase();
             display_menu(old_option, new_option);
             break;
+#endif
         case 'Q':
         case 'q':
             quit = TRUE;
@@ -234,6 +201,9 @@ int main(int argc, char *argv[])
 
     delwin(win);
     endwin();
+#ifdef PDCURSES
+    delscreen( SP);
+#endif
 
     return 0;
 }
@@ -244,7 +214,6 @@ void Continue(WINDOW *win)
     wrefresh(win);
     raw();
     wgetch(win);
-    wrefresh(win);
 }
 
 void Continue2(void)
@@ -313,7 +282,7 @@ void introTest(WINDOW *win)
 void scrollTest(WINDOW *win)
 {
     int i, OldY;
-#ifndef PDCURSES
+#if !defined (PDCURSES) && !defined (NCURSES_VERSION)
     int OldX;
 #endif
     werase(win);
@@ -330,7 +299,7 @@ void scrollTest(WINDOW *win)
         wrefresh(win);
     };
 
-#ifdef PDCURSES
+#if defined (PDCURSES) || defined (NCURSES_VERSION)
     OldY = getmaxy(win);
 #else
     getmaxyx(win, OldY, OldX);
@@ -367,10 +336,9 @@ void scrollTest(WINDOW *win)
 void inputTest(WINDOW *win)
 {
     int w, h, bx, by, sw, sh, i, c, num = 0;
-    int line_to_use = 3;
     char buffer[80];
     WINDOW *subWin;
-    static const char spinner[4] = "/-\\|";
+    static const char spinner[5] = "/-\\|";
     int spinner_count = 0;
 
     wclear(win);
@@ -403,6 +371,7 @@ void inputTest(WINDOW *win)
     wclear (win);
     mvwaddstr(win, 1, 1,
         "Press keys (or mouse buttons) to show their names");
+    mvwaddstr(win, 2, 1, "Press spacebar to finish, Ctrl-A to return to main menu");
     mvwaddstr(win, 2, 1, "Press spacebar to finish");
     wrefresh(win);
 
@@ -413,9 +382,8 @@ void inputTest(WINDOW *win)
     wtimeout(win, 200);
 
 #ifdef PDCURSES
-    mouse_set(ALL_MOUSE_EVENTS | REPORT_MOUSE_POSITION);
-    PDC_save_key_modifiers(TRUE);
-//  PDC_return_key_modifiers(TRUE);
+    mouse_set(ALL_MOUSE_EVENTS);
+    PDC_return_key_modifiers(TRUE);
 #endif
     curs_set(0);        /* turn cursor off */
 
@@ -430,30 +398,30 @@ void inputTest(WINDOW *win)
                 spinner_count++;
                 if (spinner_count == 4)
                     spinner_count = 0;
-                mvwaddch(win, line_to_use, 3, spinner[spinner_count]);
+                mvwaddch(win, 3, 3, spinner[spinner_count]);
                 wrefresh(win);
             }
             else
                 break;
         }
 #ifdef PDCURSES
-//      wmove(win, line_to_use + 1, 18);
-//      wclrtoeol(win);
+        wmove(win, 4, 18);
+        wclrtoeol(win);
 #endif
-        mvwaddstr(win, line_to_use, 5, "Key Pressed: ");
+        mvwaddstr(win, 3, 5, "Key Pressed: ");
         wclrtoeol(win);
 
         wprintw( win, "(%x) ", c);
         if( has_key( c))
             wprintw(win, "%s", keyname(c));
-        else if (isprint(c) || c > 0xff)
-            waddch( win, c);
+        else if (isprint(c))
+            wprintw(win, "%c", c);
         else
             wprintw(win, "%s", unctrl(c));
 #ifdef PDCURSES
         if (c == KEY_MOUSE)
         {
-            int button = 0, status = 0;
+            int button = 0;
             request_mouse_pos();
 
             if (BUTTON_CHANGED(1))
@@ -462,15 +430,23 @@ void inputTest(WINDOW *win)
                 button = 2;
             else if (BUTTON_CHANGED(3))
                 button = 3;
-            else if (BUTTON_CHANGED(4))   /* added 21 Jan 2011: BJG */
-                button = 4;
-            else if (BUTTON_CHANGED(5))
-                button = 5;
-            if( button)
-                status = (button > 3 ? Mouse_status.xbutton[(button) - 4] :
-                                       Mouse_status.button[(button) - 1]);
 
-            wmove(win, line_to_use, 5);
+            if (button && (BUTTON_STATUS(button) &
+                BUTTON_MODIFIER_MASK))
+            {
+                waddstr(win, " Modifier(s):");
+
+                if (BUTTON_STATUS(button) & BUTTON_SHIFT)
+                    waddstr(win, " SHIFT");
+
+                if (BUTTON_STATUS(button) & BUTTON_CONTROL)
+                    waddstr(win, " CONTROL");
+
+                if (BUTTON_STATUS(button) & BUTTON_ALT)
+                    waddstr(win, " ALT");
+            }
+
+            wmove(win, 4, 18);
             wclrtoeol(win);
             wprintw(win, "Button %d: ", button);
 
@@ -484,30 +460,19 @@ void inputTest(WINDOW *win)
                 waddstr(win, "wheel lt: ");
             else if (MOUSE_WHEEL_RIGHT)
                 waddstr(win, "wheel rt: ");
-            else if ((status & BUTTON_ACTION_MASK) == BUTTON_PRESSED)
+            else if ((BUTTON_STATUS(button) &
+                BUTTON_ACTION_MASK) == BUTTON_PRESSED)
                 waddstr(win, "pressed: ");
-            else if ((status & BUTTON_ACTION_MASK) == BUTTON_CLICKED)
+            else if ((BUTTON_STATUS(button) &
+                BUTTON_ACTION_MASK) == BUTTON_CLICKED)
                 waddstr(win, "clicked: ");
-            else if ((status & BUTTON_ACTION_MASK) == BUTTON_DOUBLE_CLICKED)
+            else if ((BUTTON_STATUS(button) &
+                BUTTON_ACTION_MASK) == BUTTON_DOUBLE_CLICKED)
                 waddstr(win, "double: ");
-            else if ((status & BUTTON_ACTION_MASK) == BUTTON_TRIPLE_CLICKED)
-                waddstr(win, "triple: ");
             else
                 waddstr(win, "released: ");
 
-            wprintw(win, "Posn: Y: %d X: %d", MOUSE_Y_POS, MOUSE_X_POS);
-            if (button && (status & BUTTON_MODIFIER_MASK))
-            {
-                if (status & BUTTON_SHIFT)
-                    waddstr(win, " SHIFT");
-
-                if (status & BUTTON_CONTROL)
-                    waddstr(win, " CONTROL");
-
-                if (status & BUTTON_ALT)
-                    waddstr(win, " ALT");
-            }
-
+            wprintw(win, "Position: Y: %d X: %d", MOUSE_Y_POS, MOUSE_X_POS);
         }
         else if (PDC_get_key_modifiers())
         {
@@ -527,11 +492,8 @@ void inputTest(WINDOW *win)
 #endif
         wrefresh(win);
 
-        if (c == ' ')
+        if (c == ' ' || c == 1)
             break;
-        line_to_use++;
-        if( line_to_use == 10)
-           line_to_use = 3;
     }
 
     wtimeout(win, -1);  /* turn off timeout() */
@@ -539,10 +501,14 @@ void inputTest(WINDOW *win)
 
 #ifdef PDCURSES
     mouse_set(0L);
-    PDC_save_key_modifiers(FALSE);
-//  PDC_return_key_modifiers(FALSE);
+    PDC_return_key_modifiers(FALSE);
 #endif
     wclear(win);
+    if( c == 1)
+    {
+       delwin( subWin);
+       return;
+    }
     mvwaddstr(win, 2, 1, "Press some keys for 5 seconds");
     mvwaddstr(win, 1, 1, "Pressing ^C should do nothing");
     wrefresh(win);
@@ -610,6 +576,9 @@ void outputTest(WINDOW *win)
     chtype ch;
     int by, bx;
 
+#ifdef PDCURSES
+    PDC_set_blink(TRUE);
+#endif
     nl();
     wclear(win);
     mvwaddstr(win, 1, 1, "You should now have a screen in the upper "
@@ -766,6 +735,9 @@ void outputTest(WINDOW *win)
     mvaddstr(LINES - 2, 10, Buffer);
     refresh();
     Continue(win);
+#ifdef PDCURSES
+    PDC_set_blink(FALSE);
+#endif
 }
 
 #if HAVE_RESIZE
@@ -841,6 +813,7 @@ void padTest(WINDOW *dummy)
     spad = subpad(pad, 12, 25, 7, 52);
     mvwaddstr(spad, 2, 2, "This is a new subpad");
     box(spad, 0, 0);
+    delwin(spad);
     prefresh(pad, 0, 0, 0, 0, 15, 75);
     keypad(pad, TRUE);
     raw();
@@ -902,7 +875,7 @@ void clipboardTest(WINDOW *win)
         "This test will place the following string in the system clipboard:");
     mvaddstr(2, 1, text);
 
-    i = PDC_setclipboard(text, strlen(text));
+    i = PDC_setclipboard(text, (long)strlen(text));
 
     switch(i)
     {
@@ -922,6 +895,30 @@ void clipboardTest(WINDOW *win)
 }
 #endif /* HAVE_CLIPBOARD */
 
+void curTest(void)
+{
+    do {
+        int c = getch();
+
+#if defined (PDCURSES) || defined (NCURSES_VERSION)
+        if (c == KEY_UP)
+            move(getcury(stdscr) - 1, getcurx(stdscr));
+        else if (c == KEY_DOWN)
+            move(getcury(stdscr) + 1, getcurx(stdscr));
+        else if (c == KEY_LEFT)
+            move(getcury(stdscr), getcurx(stdscr) - 1);
+        else if (c == KEY_RIGHT)
+            move(getcury(stdscr), getcurx(stdscr) + 1);
+#ifdef PDCURSES
+        else if (c == 'i')
+            curs_set(SP->visibility == 1 ? 2 : 1);
+#endif
+        else
+#endif
+            break;
+    } while (TRUE);
+}
+
 void acsTest(WINDOW *win)
 {
     static const char *acs_names[] =
@@ -930,14 +927,55 @@ void acsTest(WINDOW *win)
         "ACS_LTEE", "ACS_RTEE", "ACS_TTEE", "ACS_BTEE", "ACS_HLINE",
         "ACS_VLINE", "ACS_PLUS",
 
-        "ACS_S1", "ACS_S9", "ACS_DIAMOND", "ACS_CKBOARD", "ACS_DEGREE",
-        "ACS_PLMINUS", "ACS_BULLET",
-
-        "ACS_LARROW", "ACS_RARROW", "ACS_UARROW", "ACS_DARROW",
-        "ACS_BOARD", "ACS_LANTERN", "ACS_BLOCK",
+#ifdef ACS_D_ULCORNER
+        "ACS_D_ULCORNER", "ACS_D_URCORNER", "ACS_D_LLCORNER", "ACS_D_LRCORNER",
+        "ACS_D_LTEE", "ACS_D_RTEE", "ACS_D_TTEE", "ACS_D_BTEE", "ACS_D_HLINE",
+        "ACS_D_VLINE", "ACS_D_PLUS",
+#endif
+#ifdef ACS_SD_ULCORNER
+        "ACS_SD_ULCORNER", "ACS_SD_URCORNER", "ACS_SD_LLCORNER",
+        "ACS_SD_LRCORNER", "ACS_SD_LTEE",
+        "ACS_SD_RTEE", "ACS_SD_TTEE", "ACS_SD_BTEE", "ACS_SD_PLUS",
+        "ACS_DS_ULCORNER", "ACS_DS_URCORNER", "ACS_DS_LLCORNER",
+        "ACS_DS_LRCORNER", "ACS_DS_LTEE", "ACS_DS_RTEE", "ACS_DS_TTEE",
+        "ACS_DS_BTEE", "ACS_DS_PLUS",
+#endif
+        "ACS_S1",
 #ifdef ACS_S3
-        "ACS_S3", "ACS_S7", "ACS_LEQUAL", "ACS_GEQUAL",
-        "ACS_PI", "ACS_NEQUAL", "ACS_STERLING",
+        "ACS_S3", "ACS_S7",
+#endif
+        "ACS_S9", "ACS_DIAMOND",
+#ifdef ACS_CLUB
+        "ACS_CLUB", "ACS_SPADE", "ACS_HEART",
+        "ACS_LTBOARD",
+#endif
+        "ACS_BOARD", "ACS_CKBOARD", "ACS_DEGREE", "ACS_PLMINUS",
+        "ACS_BULLET",
+#ifdef ACS_SM_BULLET
+        "ACS_SM_BULLET", "ACS_MED_BULLET", "ACS_WHITE_BULLET",
+        "ACS_PILCROW", "ACS_SECTION", "ACS_SMILE", "ACS_REV_SMILE",
+#endif
+        "ACS_LARROW", "ACS_RARROW", "ACS_UARROW", "ACS_DARROW",
+        "ACS_LANTERN", "ACS_BLOCK",
+#ifdef ACS_LEQUAL
+        "ACS_LEQUAL", "ACS_GEQUAL", "ACS_NEQUAL",
+        "ACS_PI",  "ACS_STERLING",
+#endif
+#ifdef ACS_CENT
+        "ACS_CENT", "ACS_YEN", "ACS_PESETA",
+        "ACS_ALPHA", "ACS_BETA", "ACS_GAMMA", "ACS_UP_SIGMA",
+        "ACS_LO_SIGMA", "ACS_MU", "ACS_TAU", "ACS_UP_PHI", "ACS_LO_PHI",
+        "ACS_OMEGA", "ACS_DELTA", "ACS_INFINITY", "ACS_THETA", "ACS_EPSILON",
+        "ACS_INTERSECT", "ACS_SUP2", "ACS_SUP_N", "ACS_TRIPLE_BAR",
+        "ACS_APPROX_EQ", "ACS_SQUARE_ROOT", "ACS_NOT", "ACS_REV_NOT",
+        "ACS_HALF", "ACS_QUARTER", "ACS_DIVISION",
+        "ACS_UP_INTEGRAL", "ACS_LO_INTEGRAL",
+        "ACS_UBLOCK", "ACS_BBLOCK",
+        "ACS_LBLOCK", "ACS_RBLOCK",
+        "ACS_A_ORDINAL", "ACS_O_ORDINAL",
+        "ACS_INV_BANG", "ACS_INV_QUERY",
+        "ACS_LEFT_ANG_QU", "ACS_RIGHT_ANG_QU",
+        "ACS_CENTER_SQU", "ACS_F_WITH_HOOK",
 #endif
     };
 
@@ -947,35 +985,115 @@ void acsTest(WINDOW *win)
         ACS_LTEE, ACS_RTEE, ACS_TTEE, ACS_BTEE, ACS_HLINE,
         ACS_VLINE, ACS_PLUS,
 
-        ACS_S1, ACS_S9, ACS_DIAMOND, ACS_CKBOARD, ACS_DEGREE,
-        ACS_PLMINUS, ACS_BULLET,
-
-        ACS_LARROW, ACS_RARROW, ACS_UARROW, ACS_DARROW, ACS_BOARD,
-        ACS_LANTERN, ACS_BLOCK
-# ifdef ACS_S3
-        , ACS_S3, ACS_S7, ACS_LEQUAL, ACS_GEQUAL, ACS_PI,
-        ACS_NEQUAL, ACS_STERLING
-# endif
+#ifdef ACS_D_ULCORNER
+        ACS_D_ULCORNER, ACS_D_URCORNER, ACS_D_LLCORNER, ACS_D_LRCORNER,
+        ACS_D_LTEE, ACS_D_RTEE, ACS_D_TTEE, ACS_D_BTEE, ACS_D_HLINE,
+        ACS_D_VLINE, ACS_D_PLUS,
+#endif
+#ifdef ACS_SD_ULCORNER
+        ACS_SD_ULCORNER, ACS_SD_URCORNER, ACS_SD_LLCORNER,
+        ACS_SD_LRCORNER, ACS_SD_LTEE,
+        ACS_SD_RTEE, ACS_SD_TTEE, ACS_SD_BTEE, ACS_SD_PLUS,
+        ACS_DS_ULCORNER, ACS_DS_URCORNER, ACS_DS_LLCORNER,
+        ACS_DS_LRCORNER, ACS_DS_LTEE, ACS_DS_RTEE, ACS_DS_TTEE,
+        ACS_DS_BTEE, ACS_DS_PLUS,
+#endif
+        ACS_S1,
+#ifdef ACS_S3
+        ACS_S3, ACS_S7,
+#endif
+        ACS_S9, ACS_DIAMOND,
+#ifdef ACS_CLUB
+        ACS_CLUB, ACS_SPADE, ACS_HEART, ACS_LTBOARD,
+#endif
+        ACS_BOARD, ACS_CKBOARD, ACS_DEGREE, ACS_PLMINUS, ACS_BULLET,
+#ifdef ACS_SM_BULLET
+        ACS_SM_BULLET, ACS_MED_BULLET, ACS_WHITE_BULLET,
+        ACS_PILCROW, ACS_SECTION, ACS_SMILE, ACS_REV_SMILE,
+#endif
+        ACS_LARROW, ACS_RARROW, ACS_UARROW, ACS_DARROW,
+        ACS_LANTERN, ACS_BLOCK,
+#ifdef ACS_LEQUAL
+        ACS_LEQUAL, ACS_GEQUAL, ACS_NEQUAL,
+        ACS_PI,  ACS_STERLING,
+#endif
+#ifdef ACS_CENT
+        ACS_CENT, ACS_YEN, ACS_PESETA,
+        ACS_ALPHA, ACS_BETA, ACS_GAMMA, ACS_UP_SIGMA,
+        ACS_LO_SIGMA, ACS_MU, ACS_TAU, ACS_UP_PHI, ACS_LO_PHI,
+        ACS_OMEGA, ACS_DELTA, ACS_INFINITY, ACS_THETA, ACS_EPSILON,
+        ACS_INTERSECT, ACS_SUP2, ACS_SUP_N, ACS_TRIPLE_BAR,
+        ACS_APPROX_EQ, ACS_SQUARE_ROOT, ACS_NOT, ACS_REV_NOT,
+        ACS_HALF, ACS_QUARTER, ACS_DIVISION,
+        ACS_UP_INTEGRAL, ACS_LO_INTEGRAL,
+        ACS_UBLOCK, ACS_BBLOCK,
+        ACS_LBLOCK, ACS_RBLOCK,
+        ACS_A_ORDINAL, ACS_O_ORDINAL,
+        ACS_INV_BANG, ACS_INV_QUERY,
+        ACS_LEFT_ANG_QU, ACS_RIGHT_ANG_QU,
+        ACS_CENTER_SQU, ACS_F_WITH_HOOK,
+#endif
     };
 
-#if HAVE_WIDE
+#if HAVE_WIDE && defined( WACS_S1)
     const cchar_t *wacs_values[] =
     {
         WACS_ULCORNER, WACS_URCORNER, WACS_LLCORNER, WACS_LRCORNER,
         WACS_LTEE, WACS_RTEE, WACS_TTEE, WACS_BTEE, WACS_HLINE,
         WACS_VLINE, WACS_PLUS,
 
-        WACS_S1, WACS_S9, WACS_DIAMOND, WACS_CKBOARD, WACS_DEGREE,
-        WACS_PLMINUS, WACS_BULLET,
-
-        WACS_LARROW, WACS_RARROW, WACS_UARROW, WACS_DARROW, WACS_BOARD,
-        WACS_LANTERN, WACS_BLOCK
-# ifdef WACS_S3
-        , WACS_S3, WACS_S7, WACS_LEQUAL, WACS_GEQUAL, WACS_PI,
-        WACS_NEQUAL, WACS_STERLING
-# endif
+#ifdef WACS_D_ULCORNER
+        WACS_D_ULCORNER, WACS_D_URCORNER, WACS_D_LLCORNER, WACS_D_LRCORNER,
+        WACS_D_LTEE, WACS_D_RTEE, WACS_D_TTEE, WACS_D_BTEE, WACS_D_HLINE,
+        WACS_D_VLINE, WACS_D_PLUS,
+#endif
+#ifdef WACS_SD_ULCORNER
+        WACS_SD_ULCORNER, WACS_SD_URCORNER, WACS_SD_LLCORNER,
+        WACS_SD_LRCORNER, WACS_SD_LTEE,
+        WACS_SD_RTEE, WACS_SD_TTEE, WACS_SD_BTEE, WACS_SD_PLUS,
+        WACS_DS_ULCORNER, WACS_DS_URCORNER, WACS_DS_LLCORNER,
+        WACS_DS_LRCORNER, WACS_DS_LTEE, WACS_DS_RTEE, WACS_DS_TTEE,
+        WACS_DS_BTEE, WACS_DS_PLUS,
+#endif
+        WACS_S1,
+#ifdef WACS_S3
+        WACS_S3, WACS_S7,
+#endif
+        WACS_S9, WACS_DIAMOND,
+#ifdef WACS_CLUB
+        WACS_CLUB, WACS_SPADE, WACS_HEART, WACS_LTBOARD,
+#endif
+        WACS_BOARD, WACS_CKBOARD, WACS_DEGREE, WACS_PLMINUS, WACS_BULLET,
+#ifdef WACS_SM_BULLET
+        WACS_SM_BULLET, WACS_MED_BULLET, WACS_WHITE_BULLET,
+        WACS_PILCROW, WACS_SECTION, WACS_SMILE, WACS_REV_SMILE,
+#endif
+        WACS_LARROW, WACS_RARROW, WACS_UARROW, WACS_DARROW,
+        WACS_LANTERN, WACS_BLOCK,
+#ifdef WACS_LEQUAL
+        WACS_LEQUAL, WACS_GEQUAL, WACS_NEQUAL,
+        WACS_PI,  WACS_STERLING,
+#endif
+#ifdef WACS_CENT
+        WACS_CENT, WACS_YEN, WACS_PESETA,
+        WACS_ALPHA, WACS_BETA, WACS_GAMMA, WACS_UP_SIGMA,
+        WACS_LO_SIGMA, WACS_MU, WACS_TAU, WACS_UP_PHI, WACS_LO_PHI,
+        WACS_OMEGA, WACS_DELTA, WACS_INFINITY, WACS_THETA, WACS_EPSILON,
+        WACS_INTERSECT, WACS_SUP2, WACS_SUP_N, WACS_TRIPLE_BAR,
+        WACS_APPROX_EQ, WACS_SQUARE_ROOT, WACS_NOT, WACS_REV_NOT,
+        WACS_HALF, WACS_QUARTER, WACS_DIVISION,
+        WACS_UP_INTEGRAL, WACS_LO_INTEGRAL,
+        WACS_UBLOCK, WACS_BBLOCK,
+        WACS_LBLOCK, WACS_RBLOCK,
+        WACS_A_ORDINAL, WACS_O_ORDINAL,
+        WACS_INV_BANG, WACS_INV_QUERY,
+        WACS_LEFT_ANG_QU, WACS_RIGHT_ANG_QU,
+        WACS_CENTER_SQU, WACS_F_WITH_HOOK,
+#endif               /* #if WACS_CENT */
     };
+#endif               /* #ifdef WACS_S1   */
 
+#if HAVE_WIDE
     static const wchar_t russian[] = {0x0420, 0x0443, 0x0441, 0x0441,
         0x043a, 0x0438, 0x0439, L' ', 0x044f, 0x0437, 0x044b, 0x043a, 0};
 
@@ -987,58 +1105,335 @@ void acsTest(WINDOW *win)
 
     static const wchar_t fullwidth[] = { 0xff26, 0xff55, 0xff4c, 0xff4c,
         0xff57, 0xff49, 0xff44, 0xff54, 0xff48, 0 };  /* "Fullwidth" */
+
+    static const wchar_t combining_marks[] = { L'C', L'o', 0x35c, L'm',
+                   L'b', 0x30a, L'i', L'n', L'i', 0x304, L'n', 0x30b, 0x329,
+                   L'g', 0x310,
+                   L' ', L'C', 0x338, L'h', 0x306,  L'a', 0x361, L'r', L's',
+                   0x30e, 0x348, 0 };
+
 #endif
 
-    int i, tmarg = (LINES - 22) / 2;
+    int i, tmarg = 1, ncols = (COLS - 4) / 19;
+    int col_size = (COLS - 4) / ncols;
+    int n_items = sizeof( acs_names) / sizeof( acs_names[0]);
+    int n_rows = LINES / 2 - 4;
 
-    attrset(A_BOLD);
-    mvaddstr(tmarg, (COLS - 23) / 2, "Alternate Character Set");
-    attrset(A_NORMAL);
-
-    tmarg += 3;
-
-    for (i = 0; i < sizeof( acs_names) / sizeof( acs_names[0]); i++)
+    i = 0;
+    while( i < n_items)
     {
-        move((i % 8) * 2 + tmarg, (i / 8) * (COLS / 4) + (COLS / 8 - 7));
-        addch(acs_values[i]);
-        printw(" %s", acs_names[i]);
-    }
+        int j, xloc = 3;
 
-    mvaddstr(tmarg + 18, 3, "Press any key to continue");
-    getch();
+        attrset(A_BOLD);
+        mvaddstr( 1, (COLS - 23) / 2, "Alternate Character Set");
+        attrset(A_NORMAL);
+        tmarg = 4;
+        while( i < n_items && xloc < COLS - col_size)
+        {
+            for( j = 0; i < n_items && j < n_rows; j++, i++)
+            {
+                move( j * 2 + tmarg, xloc);
+                addch(acs_values[i]);
+                printw(" %s", acs_names[i]);
+            }
+            xloc += col_size;
+        }
+
+        mvaddstr( tmarg + n_rows * 2, 3, curses_version( ));
+        move( tmarg + n_rows * 2 + 1, 3);
+        printw( "sizeof( chtype) = %d; sizeof( mmask_t) = %d",
+                           (int)sizeof( chtype), (int)sizeof( mmask_t));
+        mvaddstr(tmarg + n_rows * 2 + 2, 3, "Press any key to continue");
+        getch();
+        clear( );
+    }
 
 #if HAVE_WIDE
-    clear();
-
-    attrset(A_BOLD);
-    mvaddstr(tmarg - 3, (COLS - 28) / 2, "Wide Alternate Character Set");
-    attrset(A_NORMAL);
-
-    for (i = 0; i < sizeof( acs_names) / sizeof( acs_names[0]); i++)
+    i = 0;
+    while( i < n_items)
     {
-        move((i % 8) * 2 + tmarg, (i / 8) * (COLS / 4) + (COLS / 8 - 7));
-        add_wch(wacs_values[i]);
-        printw(" W%s", acs_names[i]);
-    }
+        int j, xloc = 3;
 
-    /* Spanish, Russian, Greek, Georgian, fullwidth */
+        attrset(A_BOLD);
+        mvaddstr( 1, (COLS - 28) / 2, "Wide Alternate Character Set");
+        attrset(A_NORMAL);
+        tmarg = 4;
+#ifdef WACS_S1
+        while( i < n_items && xloc < COLS - col_size)
+        {
+            for( j = 0; i < n_items && j < n_rows; j++, i++)
+            {
+                move( j * 2 + tmarg, xloc);
+                add_wch( wacs_values[i]);
+                printw(" W%s", acs_names[i]);
+            }
+            xloc += col_size;
+        }
+#endif
+    /* Spanish, Russian, Greek, Georgian, fullwidth, combining */
 
-    mvaddwstr(tmarg + 16, COLS / 8 - 5, L"Espa\xf1ol");
-    mvaddwstr(tmarg + 16, 3 * (COLS / 8) - 5, russian);
-    mvaddwstr(tmarg + 16, 5 * (COLS / 8) - 5, greek);
-    mvaddwstr(tmarg + 16, 7 * (COLS / 8) - 5, georgian);
-    mvaddwstr(tmarg + 17, COLS / 8 - 5, fullwidth);
+        tmarg += n_rows * 2;
+        mvaddwstr(tmarg, COLS / 8 - 5, L"Espa\xf1ol");
+        mvaddwstr(tmarg, 3 * (COLS / 8) - 5, russian);
+        mvaddwstr(tmarg, 5 * (COLS / 8) - 5, greek);
+        mvaddwstr(tmarg, 7 * (COLS / 8) - 5, georgian);
+        mvaddwstr(tmarg + 1, COLS / 8 - 5, fullwidth);
 
-#if(CHTYPE_LONG >= 2)       /* "non-standard" 64-bit chtypes     */
-    mvaddch( tmarg + 17, 7 * (COLS / 8) - 5, (chtype)0x1d11e);
+        mvaddwstr(tmarg + 1, 3 * (COLS / 8) - 5, combining_marks);
+#ifdef CHTYPE_64
+        mvaddch( tmarg + 1, 7 * (COLS / 8) - 5, (chtype)0x1d11e);
 #endif            /* U+1D11E = musical symbol G clef */
 
-    mvaddstr(tmarg + 18, 3, "Press any key to continue");
-    getch();
+        mvaddstr(tmarg + 2, 3, "Press any key to continue");
+        getch();
+        clear( );
+    }
+#endif
+}
+
+void attrTest(WINDOW *win)
+{
+    int tmarg = (LINES - 16) / 2;
+    int col1 = (COLS - 36) / 2, col2 = col1 + 20;
+
+    attrset(A_BOLD);
+    mvaddstr(tmarg, (COLS - 20) / 2, "Character Attributes");
+    attrset(A_NORMAL);
+
+    refresh();
+
+#ifdef PDCURSES
+    PDC_set_blink(TRUE);
+    PDC_set_bold(TRUE);
+#endif
+
+#ifdef A_ITALIC
+    attrset(A_ITALIC);
+    mvaddstr(tmarg + 3, col1, "A_ITALIC");
+    attrset(A_NORMAL);
+#endif
+
+    attrset(A_BOLD);
+    mvaddstr(tmarg + 5, col1, "A_BOLD");
+    attrset(A_NORMAL);
+
+    attrset(A_BLINK);
+    mvaddstr(tmarg + 7, col1, "A_BLINK");
+    attrset(A_NORMAL);
+
+    attrset(A_REVERSE);
+    mvaddstr(tmarg + 9, col1, "A_REVERSE");
+    attrset(A_NORMAL);
+
+    attrset(A_STANDOUT);
+    mvaddstr(tmarg + 11, col1, "A_STANDOUT");
+    attrset(A_NORMAL);
+
+    attrset(A_UNDERLINE);
+    mvaddstr(tmarg + 13, col1, "A_UNDERLINE");
+    attrset(A_NORMAL);
+
+#ifdef A_ITALIC
+    attrset(A_ITALIC|A_UNDERLINE);
+    mvaddstr(tmarg + 3, col2, "Underlined Italic");
+    attrset(A_NORMAL);
+#endif
+
+    attrset(A_BOLD|A_UNDERLINE);
+    mvaddstr(tmarg + 5, col2, "Underlined Bold");
+    attrset(A_NORMAL);
+
+    attrset(A_BLINK|A_UNDERLINE);
+    mvaddstr(tmarg + 7, col2, "Underlined Blink");
+    attrset(A_NORMAL);
+
+#ifdef A_LEFT
+    attrset(A_LEFT);
+    mvaddstr(tmarg + 9, col2, "A_LEFT");
+    attrset(A_NORMAL);
+#endif
+
+#ifdef A_RIGHT
+    attrset(A_RIGHT);
+    mvaddstr(tmarg + 11, col2, "A_RIGHT");
+    attrset(A_NORMAL);
+#endif
+
+    attrset(A_BLINK|A_REVERSE);
+    mvaddstr(tmarg + 13, col2, "Reverse Blink");
+    attrset(A_NORMAL);
+
+    mvaddstr(tmarg + 16, 3, "Press any key to continue");
+    curTest();
+
+#ifdef PDCURSES
+    PDC_set_bold(FALSE);
+    PDC_set_blink(FALSE);
 #endif
 }
 
 #if HAVE_COLOR
+void remap(int tmarg, const short *colors)
+{
+    struct
+    {
+        short red, green, blue;
+    } orgcolors[16];
+    int i, maxcol = (COLORS >= 16) ? 16 : 8;
+
+    for (i = 0; i < maxcol; i++)
+        color_content(i, &(orgcolors[i].red),
+                         &(orgcolors[i].green),
+                         &(orgcolors[i].blue));
+
+    attrset(A_BOLD);
+    mvaddstr(tmarg, (COLS - 22) / 2, " init_color() Example ");
+    attrset(A_NORMAL);
+
+    refresh();
+
+    for (i = 0; i < 8; i++)
+    {
+        init_color(colors[i], i * 125, 0, i * 125);
+
+        if (COLORS >= 16)
+            init_color(colors[i] + 8, 0, i * 125, 0);
+    }
+
+    mvaddstr(tmarg + 19, 3, "Press any key to continue");
+    curTest();
+
+    for (i = 0; i < maxcol; i++)
+        init_color(i, orgcolors[i].red,
+                      orgcolors[i].green,
+                      orgcolors[i].blue);
+}
+
+void extended(int tmarg)
+{
+    int i, x, y, z, lmarg = (COLS - 77) / 2;
+
+    erase();
+
+    curs_set(0);
+
+    attrset(A_BOLD);
+    mvaddstr(tmarg, (COLS - 15) / 2, "Extended Colors");
+    attrset(A_NORMAL);
+
+    mvaddstr(tmarg + 3, lmarg, "6x6x6 Color Cube (16-231):");
+
+    for (i = 16; i < 256; i++)
+        init_pair(i, COLOR_BLACK, i);
+
+    for (i = 16, x = 0; x < 6; x++)
+        for (z = 0; z < 6; z++)
+            for (y = 0; y < 6; y++)
+            {
+                chtype ch = ' ' | COLOR_PAIR(i++);
+
+                mvaddch(tmarg + 5 + y, z * 13 + x * 2 + lmarg, ch);
+                addch(ch);
+            }
+
+    mvaddstr(tmarg + 13, lmarg, "Greyscale (232-255):");
+
+    for (x = 0; x < 24; x++)
+    {
+        chtype ch = ' ' | COLOR_PAIR(232 + x);
+
+        mvaddch(tmarg + 15, x * 2 + lmarg, ch);
+        addch(ch);
+    }
+
+    refresh();
+    curs_set(1);
+
+    mvaddstr(tmarg + 19, 3, "Press any key to continue");
+    curTest();
+}
+
+void gradient(int tmarg)
+{
+    int i;
+    short cnum = 256, pnum = 16;
+
+    erase();
+    refresh();
+
+    curs_set(0);
+
+    attrset(A_BOLD);
+    mvaddstr(tmarg, (COLS - 17) / 2, "Colors Beyond 256");
+    attrset(A_NORMAL);
+
+    for (i = 0; i < 6; i++)
+    {
+        int j;
+        const char *output_text[6] = {
+            "Red on green to white on black | "
+            "   (gradients work just as well with",
+            "Blue on yellow to black on red | "
+            "palettes, if you have enough colors)",
+            "White on red to green on blue,  underlined (if available)",
+            "We can keep going on and on until we "
+            "run out of color pairs or colors.",
+            "Some platforms will have plenty of both "
+            "and this won't be a real problem. ",
+            "Others can be made to work that way "
+            "without too much trouble." };
+
+        const int len = (int)strlen(output_text[i]);
+
+        move(tmarg + 3 + i, (COLS - 69) / 2);
+        for (j = 0; j < len && cnum < COLORS && pnum < COLOR_PAIRS; j++)
+        {
+            const int oval = j * 1000 / len;
+            const int reverse = 1000 - oval;
+
+            if (!i)
+            {
+                init_color(cnum, 1000, oval, oval);
+                init_color(cnum + 1, 0, reverse, 0);
+            }
+            else if (i == 1)
+            {
+                init_color(cnum, 0, 0, reverse);
+                init_color(cnum + 1, 1000, reverse, 0);
+            }
+            else if( i == 2)
+            {
+                init_color(cnum, reverse, 1000, reverse);
+                init_color(cnum + 1, reverse, 0, oval);
+            }
+            else
+            {
+                const int r = rand( ) % 400, g = rand( ) % 400, b = rand( ) % 400;
+
+                init_color(cnum, r, g, b);
+                init_color(cnum + 1, 1000 - r, 1000 - g, 1000 - b);
+            }
+            init_pair(pnum, cnum, cnum + 1);
+            attrset(COLOR_PAIR(pnum));
+            if (i == 2)
+                attron(A_UNDERLINE);
+            else
+                attroff(A_UNDERLINE);
+            addch(output_text[i][j]);
+
+            cnum += 2;
+            pnum++;
+        }
+    }
+
+    refresh();
+    curs_set(1);
+
+    attrset(A_NORMAL);
+    mvaddstr(tmarg + 19, 3, "Press any key to continue");
+    curTest();
+}
+
 void colorTest(WINDOW *win)
 {
     static const short colors[] =
@@ -1054,160 +1449,63 @@ void colorTest(WINDOW *win)
     };
 
     chtype fill = ACS_BLOCK;
+    bool widecol = (COLORS >= 16);
 
-    int i, j, tmarg, col1, col2, col3, col4, ch;
+    int i, j, tmarg, col1, col2, col3;
 
     if (!has_colors())
         return;
 
-    do
+    tmarg = (LINES - 19) / 2;
+    col1 = (COLS - 60) / 2;
+    col2 = col1 + 20;
+    col3 = col2 + 20;
+
+    attrset(A_BOLD);
+    mvaddstr(tmarg, (COLS - 22) / 2, "Color Attribute Macros");
+    attrset(A_NORMAL);
+
+    if (widecol)
     {
-        tmarg = (LINES - 19) / 2;
-        col1 = (COLS - 60) / 2;
-        col2 = col1 + 15;
-        col3 = col2 + 15;
-        col4 = col3 + 15;
+        mvaddstr(tmarg + 3, col2 + 3, "Colors 0-7");
+        mvaddstr(tmarg + 3, col3 + 2, "Colors 8-15");
+    }
+    else
+    {
+        mvaddstr(tmarg + 3, col2 + 4, "A_NORMAL");
+        mvaddstr(tmarg + 3, col3 + 5, "A_BOLD");
+    }
 
-        attrset(A_BOLD);
-        mvaddstr(tmarg, (COLS - 22) / 2, "Color Attribute Macros");
-        attrset(A_NORMAL);
+    for (i = 0; i < 8; i++)
+    {
+        init_pair(i + 4, colors[i], COLOR_BLACK);
+        if (widecol)
+            init_pair(i + 12, colors[i] + 8, COLOR_BLACK);
 
-        mvaddstr(tmarg + 3, col2 + 2, "A_NORMAL");
-        mvaddstr(tmarg + 3, col3 + 3, "A_BOLD");
-        mvaddstr(tmarg + 3, col4 + 3, "A_BLINK");
+        mvaddstr(tmarg + i + 5, col1, colornames[i]);
 
-        for (i = 0; i < 8; i++)
+        for (j = 0; j < 16; j++)
         {
-            init_pair((short)(i + 4), colors[i], background_index);
-            mvaddstr(tmarg + i + 5, col1, colornames[i]);
-
-            for (j = 0; j < 12; j++)
-            {
-                mvaddch(tmarg + i + 5, col2 + j, fill | COLOR_PAIR(i + 4));
-                mvaddch(tmarg + i + 5, col3 + j, fill | COLOR_PAIR(i + 4) | A_BOLD);
-                mvaddch(tmarg + i + 5, col4 + j, fill | COLOR_PAIR(i + 4) | A_BLINK);
-            }
-            attrset( COLOR_PAIR( i + 4) | A_BLINK);
-            mvaddstr( tmarg + i + 5, col4 + 5, "Text");
-            attrset( COLOR_PAIR( i + 4) | A_BOLD);
-            mvaddstr( tmarg + i + 5, col3 + 5, "Text");
-            attroff( A_BOLD);
-            mvaddstr( tmarg + i + 5, col2 + 5, "Text");
-            attrset( A_NORMAL);
+            mvaddch(tmarg + i + 5, col2 + j, fill | COLOR_PAIR(i + 4));
+            mvaddch(tmarg + i + 5, col3 + j, fill | (widecol ?
+                    COLOR_PAIR(i + 12) : (COLOR_PAIR(i + 4) | A_BOLD) ));
         }
+    }
 
-        mvprintw(tmarg + 15, col1, "COLORS = %d", COLORS);
-        mvprintw(tmarg + 16, col1, "COLOR_PAIRS = %d", COLOR_PAIRS);
+    mvprintw(tmarg + 15, col1, "COLORS = %d", COLORS);
+    mvprintw(tmarg + 16, col1, "COLOR_PAIRS = %d", COLOR_PAIRS);
 
-#ifdef CHTYPE_LONG
-#if( CHTYPE_LONG >= 2)       /* "non-standard" 64-bit chtypes     */
-        attrset(A_ITALIC);
-        mvprintw( tmarg + 15, col3, "Italic");
-        attrset(A_ITALIC | A_BLINK);
-        mvprintw( tmarg + 15, col4, "Italic Blink");
-        attrset(A_BOLD | A_ITALIC);
-        mvprintw( tmarg + 17, col4, "Italic Bold");
-        attrset(A_BOLD | A_ITALIC | A_BLINK);
-        mvprintw( tmarg + 18, col4, "Italic Blink Bold");
-#endif
-#endif
-        attrset(A_BOLD);
-        mvprintw( tmarg + 16, col3, "Bold");
-        attrset(A_BLINK);
-        mvprintw( tmarg + 17, col3, "Blink");
-
-        attrset(A_BLINK | A_BOLD);
-        mvprintw( tmarg + 16, col4, "Blink Bold");
-/* end BJG addenda */
-        attrset(A_NORMAL);
-
-        mvaddstr(tmarg + 19, 3, "Press any key to continue");
-        ch = getch();
-# ifdef PDCURSES
-        if( ch == KEY_RESIZE)
-        {
-            erase();
-            resize_term(0, 0);
-        }
-# endif
-    }  while( ch == KEY_RESIZE);
+    mvaddstr(tmarg + 19, 3, "Press any key to continue");
+    curTest();
 
     if (can_change_color())
-    {
-        struct
-        {
-            short red, green, blue;
-        } orgcolors[16];
+        remap(tmarg, colors);
 
-        int MAXCOL = (COLORS >= 16) ? 16 : 8;
+    if (COLORS >= 256)
+        extended(tmarg);
 
-        if (MAXCOL < 8)
-            return;
-
-        for (i = 0; i < MAXCOL; i++)
-            color_content((short)i, &(orgcolors[i].red),
-                                    &(orgcolors[i].green),
-                                    &(orgcolors[i].blue));
-
-        attrset(A_BOLD);
-        mvaddstr(tmarg, (COLS - 22) / 2, " init_color() Example ");
-        attrset(A_NORMAL);
-
-        refresh();
-
-        for (i = 0; i < 8; i++)
-        {
-            init_color(colors[i], (short)(i * 125), 0, (short)(i * 125));
-
-            if (MAXCOL == 16)
-                init_color((short)(colors[i] + 8), 0, (short)(i * 125), 0);
-        }
-
-        mvaddstr(tmarg + 19, 3, "Press any key to continue");
-        getch();
-        for (i = 0; i < MAXCOL; i++)
-            init_color((short)i, orgcolors[i].red,
-                                 orgcolors[i].green,
-                                 orgcolors[i].blue);
-    }
-/* BJG additions: */
-    if( COLORS == 256 && LINES >= 18) do  /* show off all 256 colors */
-    {
-       tmarg = LINES / 2 - 8;
-       erase( );
-       for( i = 0; i < 256; i++)
-           {
-           char tbuff[4];
-           const int col = COLS / 2 - 24;
-
-           if( i >= 16)
-              init_pair((short)i, (short)i, COLOR_BLACK);
-           attrset( COLOR_PAIR( i) | A_REVERSE);
-           sprintf( tbuff, "%02x ", i);
-           mvaddstr( tmarg + i / 16, col + (i % 16) * 3, tbuff);
-           }
-       attrset( A_LEFTLINE);
-       mvaddstr( tmarg + 17, col1, "A_LEFTLINE");
-       attrset( A_UNDERLINE);
-       mvaddstr( tmarg + 18, col1, "A_UNDERLINE");
-       attrset( A_RIGHTLINE);
-       mvaddstr( tmarg + 19, col1, "A_RIGHTLINE");
-# if(CHTYPE_LONG >= 2)        /* following types don't exist otherwise: */
-       attrset( A_OVERLINE);
-       mvaddstr( tmarg + 17, col2, "A_OVERLINE");
-       attrset( A_STRIKEOUT);
-       mvaddstr( tmarg + 18, col2, "A_STRIKEOUT");
-       attrset( A_OVERLINE | A_UNDERLINE);
-       mvaddstr( tmarg + 19, col2, "Over/underlined");
-#endif
-       attrset(A_NORMAL);
-       refresh( );
-       ch = getch( );
-# ifdef PDCURSES
-        if( ch == KEY_RESIZE)
-            resize_term(0, 0);
-# endif
-    } while( ch == KEY_RESIZE);
+    if (can_change_color() && COLORS >= 768)
+        gradient(tmarg);
 }
 #endif
 

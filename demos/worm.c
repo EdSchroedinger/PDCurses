@@ -147,6 +147,9 @@ static void cleanup(void)
     refresh();
     curs_set(1);
     endwin();
+#ifdef PDCURSES
+    delscreen( SP);
+#endif
 }
 
 int main(int argc, char *argv[])
@@ -154,7 +157,8 @@ int main(int argc, char *argv[])
     const struct options *op;
     struct worm *w;
     short **ref, *ip;
-    int x, y, n, h, last, bottom, seed;
+    time_t seed;
+    int x, y, n, h, last, bottom;
 
     for (x = 1; x < argc; x++)
     {
@@ -207,7 +211,7 @@ int main(int argc, char *argv[])
     initscr();
 #endif
     seed = time((time_t *)0);
-    srand(seed);
+    srand( (unsigned)seed);
 
     noecho();
     cbreak();
@@ -222,7 +226,7 @@ int main(int argc, char *argv[])
 #ifdef A_COLOR
     if (has_colors())
     {
-        int bg = COLOR_BLACK;
+        short bg = COLOR_BLACK;
         start_color();
 
 # if defined(NCURSES_VERSION) || (defined(PDC_BUILD) && PDC_BUILD > 3000)
@@ -316,7 +320,6 @@ int main(int argc, char *argv[])
             {
 # ifdef PDCURSES
                 resize_term(0, 0);
-                erase();
 # endif
                 if (last != COLS - 1)
                 {
@@ -357,6 +360,9 @@ int main(int argc, char *argv[])
 
             if (ch == 'q')
             {
+                for (y = 0; y < LINES; y++)
+                    free( ref[y]);
+                free( ref);
                 cleanup();
                 return EXIT_SUCCESS;
             }
@@ -409,6 +415,9 @@ int main(int argc, char *argv[])
             switch (op->nopts)
             {
             case 0:
+                for (y = 0; y < LINES; y++)
+                    free( ref[y]);
+                free( ref);
                 cleanup();
                 return EXIT_SUCCESS;
             case 1:

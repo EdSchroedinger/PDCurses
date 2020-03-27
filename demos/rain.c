@@ -30,7 +30,7 @@
 #include <stdlib.h>
 #include <time.h>
 
-/* rain 11/3/1980 EPS/CITHEP */
+/* rain 1980-11-03 EPS/CITHEP */
 
 static int next_j(int j)
 {
@@ -55,7 +55,8 @@ static int next_j(int j)
 
 int main(int argc, char *argv[])
 {
-    int x, y, j, r, c, seed;
+    time_t seed;
+    int x, y, j, r, c;
     static int xpos[5], ypos[5];
 
 #ifdef XCURSES
@@ -64,11 +65,11 @@ int main(int argc, char *argv[])
     initscr();
 #endif
     seed = time((time_t *)0);
-        srand(seed);
+    srand( (unsigned)seed);
 
     if (has_colors())
     {
-        int bg = COLOR_BLACK;
+        short bg = COLOR_BLACK;
 
         start_color();
 
@@ -146,7 +147,6 @@ int main(int argc, char *argv[])
         case KEY_RESIZE:
 # ifdef PDCURSES
             resize_term(0, 0);
-            erase();
 # endif
             r = LINES - 4;
             c = COLS - 4;
